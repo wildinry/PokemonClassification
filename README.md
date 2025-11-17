@@ -1,10 +1,9 @@
-
-#Pokémon Type Classifier (CNN Model)
+Pokémon Type Classifier (CNN Model)
 
 This project trains a Convolutional Neural Network (CNN) to classify Pokémon by Type1 using image data.
 The dataset consists of pokemon.csv and an accompanying folder of Pokémon images.
 
-###Features
+Features
 
 Loads and preprocesses Pokémon images
 
@@ -16,20 +15,20 @@ Saves the model and label encoder
 
 Includes a prediction script (predict.py) to classify new images
 
-##Getting Started
+Getting Started
 1. Clone the repository
 git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
 cd YOUR_REPO
 
-##2. Create and activate a virtual environment
+2. Create and activate a virtual environment
 python3 -m venv venv
 source venv/bin/activate        # Mac/Linux
 venv\Scripts\activate           # Windows
 
-##3. Install dependencies
+3. Install dependencies
 pip install -r requirements.txt
 
-##4. Extract the images
+4. Extract the images
 
 A compressed image folder is included in the repository. Extract it before training:
 
@@ -49,7 +48,7 @@ project/
 │     ...
 │── requirements.txt
 
-##Training the Model
+Training the Model
 
 Run the training script:
 
@@ -79,7 +78,7 @@ Use the prediction script after training is complete:
 python predict.py images/pikachu.png
 
 
-##Sample output:
+Sample output:
 
 images/pikachu.png → Predicted Type1: Electric
 
@@ -104,7 +103,3 @@ bulbasaur.png
 charmander.png
 
 squirtle.png
-
-License
-
-This project is released under the MIT License.
