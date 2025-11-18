@@ -25,7 +25,7 @@ Follow these steps to set up your environment and prepare the training data.
 #### 1. Clone the Repository
 
 ```bash
-git clone [https://github.com/YOUR_USERNAME/YOUR_REPO.git](https://github.com/YOUR_USERNAME/YOUR_REPO.git)
+git clone [https://github.com/YOUR_USERNAME/YOUR_REPO.git](https://github.com/wildinry/ACO494_Final_Pokemon_Image.git)
 cd YOUR_REPO
 ```
 #### 2. Setup Environment
