@@ -45,18 +45,23 @@ pip install -r requirements.txt
 #### 4. Clone the Repository
 The images are compressed. Unzip them into the expected images/ directory:
 ```bash
-unzip images_compressed.zip -d images/
+unzip imageCompress.zip 
+#for Windows:
+tar -xf imageCompress.zip
 ```
 [!NOTE] Image Naming Convention: Image files must match the Pokémon names found in pokemon.csv and be all lowercase (e.g., bulbasaur.png, pikachu.png).
 #### Project Structure
 A successful setup will result in the following key file structure:
 ```bash
 project/
-├── main.py             # Main script for training the CNN model
-├── predict.py          # Script for running predictions
-├── pokemon.csv         # Pokémon metadata (Type1, etc.)
-├── requirements.txt    # Python dependencies
-└── images/             # Directory containing all unzipped Pokémon image files
+├── MobileVnetImplementation.py  
+├── pokemon.csv                  # Pokémon metadata (Type1, etc.)
+├── predict.py                   # Script for running predictions
+├── ReadME.md
+├── requirements.txt             # Python dependencies
+├── simpleCNN.py                 # Main script for training the CNN model
+├── vit.py
+└── images/                      # Directory containing all unzipped Pokémon image files
     ├── bulbasaur.png
     └── ... (all images)
 ```
