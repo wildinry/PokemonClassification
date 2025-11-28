@@ -200,7 +200,7 @@ def train_model(model: Model, train_gen: tf.keras.utils.Sequence, val_gen: tf.ke
 # 4. Evaluation and Plotting (Unchanged)
 # ----------------------------------------------------------------------
 
-def evaluate_model(model_path: str, val_gen: tf.keras.utils.Sequence):
+def evaluate_model(model_path: str, val_gen: tf.keras.utils.Sequence, classes):
     """Loads the best model and runs a final accuracy and loss test."""
     print("\n--- 5. Final Model Evaluation ---")
     
@@ -211,10 +211,107 @@ def evaluate_model(model_path: str, val_gen: tf.keras.utils.Sequence):
     model = tf.keras.models.load_model(model_path)
     
     # Evaluate the model on the validation data
-    loss, accuracy = model.evaluate(val_gen, verbose=1)
+    # loss, accuracy = model.evaluate(val_gen, verbose=1)
+
+    plot_evaluation(model, val_gen, classes)
+
 
     print(f"\nFinal Validation Loss: {loss:.4f}")
     print(f"Final Validation Accuracy: {accuracy:.4f}")
+
+def plot_evaluation(model: tf.keras.Model, val_gen, class_names):
+    """
+    Displays a sample of images from the validation generator along with 
+    the model's predictions, confidence, and the true label.
+
+    Args:
+        model: The trained tf.keras.Model.
+        val_gen: The tf.keras.utils.Sequence validation data generator.
+    """
+    ROWS = 3
+    COLUMNS = 5
+    SAMPLE_COUNT = ROWS*COLUMNS
+    print(f"\n--- Displaying a sample of {SAMPLE_COUNT} predictions ---")
+    
+    try:
+        images, true_labels_one_hot = val_gen[0]
+        
+    except IndexError:
+        print("Error: The validation generator is empty or index 0 is invalid.")
+        return
+        
+    # Ensure we don't try to plot more than are available in the first batch
+    N = min(SAMPLE_COUNT, len(images))
+    sample_images = images[:N]
+    
+    # 1. Prepare True Labels
+    # If using one-hot encoding (ndim > 1), convert to integer labels
+    if true_labels_one_hot.ndim > 1 and true_labels_one_hot.shape[1] > 1:
+        true_labels = np.argmax(true_labels_one_hot, axis=1)
+    else:
+        true_labels = true_labels_one_hot
+        
+    sample_true_labels = true_labels[:N]
+
+    # 2. Get Model Predictions
+    # Use the model to predict probabilities (confidence values)
+    predictions = model.predict(sample_images, verbose=0)
+    
+    # Get the predicted class index (highest probability)
+    predicted_labels = np.argmax(predictions, axis=1)
+    
+    # Get the confidence score for the predicted class
+    predicted_confidences = np.max(predictions, axis=1)
+
+    # 3. Plotting with Matplotlib
+    
+    # Create a figure with SAMPLE_COUNT subplots, arranged in a row
+    fig, axes = plt.subplots(ROWS, COLUMNS, figsize=(3 * N, 4))
+    # fig = figure of a certain size
+    """
+fig = <Figure size 1800x400 with 6 Axes>
+axes = array([<Axes: >, <Axes: >, <Axes: >, <Axes: >, <Axes: >, <Axes: >],
+      dtype=object)
+    """
+#     print(f"""
+# {fig = }
+# {axes = }""")
+
+    
+    # Ensure axes is iterable even if N=1
+    if N == 1:
+        axes = [axes]
+
+    for i in range(N):
+        ax = axes.flatten()[i]
+        
+        # Display the image
+        # Note: If your image data is normalized to [0, 1], Matplotlib handles it.
+        # If it's a specific data type (e.g., float32) it should display correctly.
+        img = ((sample_images[i]+1)/2)
+        ax.imshow(img) 
+        
+        # Determine if the prediction is correct
+        is_correct = (predicted_labels[i] == sample_true_labels[i])
+        color = 'green' if is_correct else 'red'
+        
+        # Get the class names for the title
+        pred_name = class_names[predicted_labels[i]]
+        true_name = class_names[sample_true_labels[i]]
+        confidence = predicted_confidences[i]
+        
+        # Create the title string
+        title_text = (f"Pred: **{pred_name}** ({confidence:.2f})\nTrue: {true_name}")
+        
+        # Set the title and color
+        ax.set_title(title_text, color=color, fontsize=10, fontweight='bold')
+        
+        # Remove axis ticks and labels for a cleaner look
+        ax.axis('off')
+
+    # Adjust the layout to prevent titles and images from overlapping
+    plt.tight_layout()
+    plt.show()
 
 def plot_training_history(history: dict, plot_path: str):
     """Plots the training and validation loss and accuracy using Matplotlib."""
@@ -268,14 +365,14 @@ def main():
         print("ERROR: Training generator has 0 samples. Cannot proceed with training.")
         return
 
-    # 3. Build Model
-    model = build_transfer_learning_model(len(classes))
+    # # 3. Build Model
+    # model = build_transfer_learning_model(len(classes))
     
-    # 4. Train Model
-    history = train_model(model, train_generator, validation_generator, MODEL_FILENAME)
+    # # 4. Train Model
+    # history = train_model(model, train_generator, validation_generator, MODEL_FILENAME)
     
     # 5. Evaluate Model
-    evaluate_model(MODEL_FILENAME, validation_generator)
+    evaluate_model(MODEL_FILENAME, validation_generator, classes)
 
     # 6. Plot History
     plot_training_history(history, PLOT_FILENAME)
