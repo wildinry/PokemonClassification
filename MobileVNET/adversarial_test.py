@@ -15,36 +15,39 @@ MODEL_FILENAME: str = 'pokemon_card_type_model.h5'
 TARGET_COLUMN: str = 'Type_1'
 IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png')
 
-EPSILON_STEPS: List[float] = [0.00, 0.005, 0.01, 0.02, 0.05, 0.07, 0.10]
+EPSILON_STEPS: List[float] = [
+    0.00, 0.05, 0.1, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45,
+    0.50, 0.55, 0.6, 0.65, 0.70, 0.75, 0.80, 0.85, 0.9, 0.95, 1.00
+]
 TEST_SAMPLE_COUNT: int = 100
+
+RESULTS_DIR = "results"
+os.makedirs(RESULTS_DIR, exist_ok=True)
 
 def preprocess_image(img):
     return tf.keras.applications.mobilenet_v2.preprocess_input(img)
 
-def create_image_dataframe(csv_path: str, dataset_path: str) -> Tuple[pd.DataFrame, List[str]]:
+def create_image_dataframe(csv_path: str, dataset_path: str):
     df_meta = pd.read_csv(csv_path)[['Name', TARGET_COLUMN]]
     name_to_type = df_meta.set_index('Name')[TARGET_COLUMN].to_dict()
-    all_possible_classes = sorted(df_meta[TARGET_COLUMN].unique())
-
+    all_classes = sorted(df_meta[TARGET_COLUMN].unique())
     image_paths = []
     for root, _, files in os.walk(dataset_path):
         if root == dataset_path:
             continue
         pokemon_name = os.path.basename(root)
         if pokemon_name in name_to_type:
-            pokemon_type = name_to_type[pokemon_name]
-            for file_name in files:
-                if file_name.lower().endswith(IMAGE_EXTENSIONS):
-                    full_path = os.path.join(root, file_name)
+            t = name_to_type[pokemon_name]
+            for file in files:
+                if file.lower().endswith(IMAGE_EXTENSIONS):
                     image_paths.append({
-                        'filepath': full_path,
-                        'Name': pokemon_name,
-                        TARGET_COLUMN: pokemon_type
+                        "filepath": os.path.join(root, file),
+                        "Name": pokemon_name,
+                        TARGET_COLUMN: t
                     })
-
     df_images = pd.DataFrame(image_paths)
     df_test = df_images.sample(TEST_SAMPLE_COUNT, random_state=RANDOM_SEED).reset_index(drop=True)
-    return df_test, all_possible_classes
+    return df_test, all_classes
 
 def create_adversarial_pattern(input_image, input_label, model: Model):
     with tf.GradientTape() as tape:
@@ -52,88 +55,77 @@ def create_adversarial_pattern(input_image, input_label, model: Model):
             input_image = tf.convert_to_tensor(input_image)
         input_image = input_image[None, ...]
         tape.watch(input_image)
-        prediction = model(input_image)
-        loss = tf.keras.losses.CategoricalCrossentropy()(input_label[None, ...], prediction)
-    gradient = tape.gradient(loss, input_image)
-    signed_grad = tf.sign(gradient)
-    return signed_grad[0]
+        pred = model(input_image)
+        loss = tf.keras.losses.CategoricalCrossentropy()(input_label[None, ...], pred)
+    grad = tape.gradient(loss, input_image)
+    return tf.sign(grad)[0]
 
-def generate_adversarial_images(df_test: pd.DataFrame, classes: List[str], model: Model, epsilon: float):
-    adversarial_images = []
-    true_labels_one_hot = []
-    class_indices = {name: i for i, name in enumerate(classes)}
-    
+def generate_adversarial_images(df_test, classes, model, epsilon):
+    adv = []
+    labels = []
+    idx = {c: i for i, c in enumerate(classes)}
     for _, row in df_test.iterrows():
         img = load_img(row['filepath'], target_size=IMAGE_SIZE)
         img_array = img_to_array(img)
-        preprocessed = preprocess_image(img_array)
-        pre_tensor = tf.convert_to_tensor(preprocessed)
-
-        true_label_index = class_indices[row[TARGET_COLUMN]]
-        one_hot = tf.one_hot(true_label_index, depth=len(classes))
-
-        if epsilon == 0.00:
-            adv_img_tensor = pre_tensor
+        p = preprocess_image(img_array)
+        tensor = tf.convert_to_tensor(p)
+        label_index = idx[row[TARGET_COLUMN]]
+        onehot = tf.one_hot(label_index, depth=len(classes))
+        if epsilon == 0:
+            out = tensor
         else:
-            perturbation = create_adversarial_pattern(pre_tensor, one_hot, model)
-            ## main alteration takes pretensor (image converted to tf tensor) epsilon is
-            ## the "strength" of adversarial attack, and pertubation is a "map" to show 
-            ## which pixels to alter
-            adv_img_tensor = pre_tensor + epsilon * perturbation
-            adv_img_tensor = tf.clip_by_value(adv_img_tensor, -1.0, 1.0) 
+            pert = create_adversarial_pattern(tensor, onehot, model)
+            out = tensor + epsilon * pert
+            out = tf.clip_by_value(out, -1.0, 1.0)
+        adv.append(out.numpy())
+        labels.append(onehot.numpy())
+    return np.array(adv), np.array(labels)
 
-        adversarial_images.append(adv_img_tensor.numpy())
-        true_labels_one_hot.append(one_hot.numpy())
-    
-    return np.array(adversarial_images), np.array(true_labels_one_hot)
-
-def evaluate_and_plot(adv_images, true_labels_one_hot, model: Model, classes: List[str], epsilon: float):
-    adv_predictions = model.predict(adv_images, verbose=0)
-    predicted = np.argmax(adv_predictions, axis=1)
-    truth = np.argmax(true_labels_one_hot, axis=1)
-    correct = np.sum(predicted == truth)
-    accuracy = correct / len(adv_images)
-    print(f"Epsilon = {epsilon:.3f} | Accuracy = {accuracy:.4f}")
-    return accuracy
-
-def plot_accuracy_vs_epsilon(epsilons, accuracies):
-    plt.figure(figsize=(8,5))
-    plt.plot(epsilons, accuracies, marker='o')
-    plt.xlabel("Epsilon")
-    plt.ylabel("Accuracy")
-    plt.title("Model Robustness vs Epsilon")
-    plt.grid(True)
-    plt.show()
+def save_grid(images, epsilon):
+    imgs = (images + 1) / 2
+    plt.figure(figsize=(15, 15))
+    cols = 10
+    rows = 10
+    for i in range(100):
+        plt.subplot(rows, cols, i + 1)
+        plt.imshow(imgs[i])
+        plt.axis("off")
+    path = os.path.join(RESULTS_DIR, f"grid_eps_{epsilon:.2f}.png")
+    plt.tight_layout()
+    plt.savefig(path, dpi=200)
+    plt.close()
 
 def run_adversarial_test():
     tf.random.set_seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
-
     df_test, classes = create_image_dataframe(CSV_PATH, DATASET_PATH)
-    if df_test is None:
-        return
-
     model = tf.keras.models.load_model(MODEL_FILENAME)
+    base_imgs, base_lbls = generate_adversarial_images(df_test.copy(), classes, model, epsilon=0.00)
+    eps_list = []
+    acc_list = []
 
-    base_images, true_labels = generate_adversarial_images(
-        df_test.copy(), classes, model, epsilon=0.00
-    )
-
-    recorded_accuracies = []
-
-    for epsilon in EPSILON_STEPS:
-        if epsilon == 0.00:
-            adv_images = base_images
-            labels = true_labels
+    for eps in EPSILON_STEPS:
+        if eps == 0:
+            imgs = base_imgs
+            labels = base_lbls
         else:
-            adv_images, labels = generate_adversarial_images(
-                df_test.copy(), classes, model, epsilon
-            )
+            imgs, labels = generate_adversarial_images(df_test.copy(), classes, model, eps)
+        preds = model.predict(imgs, verbose=0)
+        pred = np.argmax(preds, axis=1)
+        truth = np.argmax(labels, axis=1)
+        acc = np.sum(pred == truth) / len(imgs)
+        eps_list.append(eps)
+        acc_list.append(acc)
+        save_grid(imgs, eps)
 
-        acc = evaluate_and_plot(adv_images, labels, model, classes, epsilon)
-        recorded_accuracies.append(acc)
-
-    plot_accuracy_vs_epsilon(EPSILON_STEPS, recorded_accuracies)
+    plt.figure(figsize=(8, 5))
+    plt.plot(eps_list, acc_list, marker='o')
+    plt.xlabel("Epsilon")
+    plt.ylabel("Accuracy")
+    plt.title("Model Accuracy vs Epsilon")
+    plt.grid(True)
+    plt.savefig(os.path.join(RESULTS_DIR, "accuracy_curve.png"), dpi=300)
+    plt.close()
 
 if __name__ == '__main__':
     run_adversarial_test()
